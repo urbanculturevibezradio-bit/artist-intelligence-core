@@ -1,5 +1,5 @@
 // ============================================================
-// pages/riddim-studio.tsx — Phase 4: Vocals tab added
+// pages/riddim-studio.tsx — Phase 5: Packs, Voices, Marketplace tabs
 // ============================================================
 'use client';
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -10,86 +10,71 @@ import FinalizeRiddim from '@/components/FinalizeRiddim';
 import { useJobPoller } from '@/hooks/useJobPoller';
 import '@/styles/globals.css';
 
-type StudioTab = 'upload' | 'mixer' | 'flow' | 'vocals' | 'versions' | 'finalize';
+type StudioTab = 'upload'|'mixer'|'flow'|'vocals'|'packs'|'voices'|'marketplace'|'versions'|'finalize';
 
-const TABS: Array<{ id: StudioTab; label: string; emoji: string }> = [
-  { id: 'upload',   label: 'Upload',         emoji: '\uD83C\uDFA4' },
-  { id: 'mixer',    label: 'Mixer',          emoji: '\uD83C\uDF9B\uFE0F' },
-  { id: 'flow',     label: 'Flow & Pockets', emoji: '\uD83D\uDCCA' },
-  { id: 'vocals',   label: 'Vocals',         emoji: '\uD83C\uDFB6' },
-  { id: 'versions', label: 'Versions',       emoji: '\uD83C\uDFB5' },
-  { id: 'finalize', label: 'Finalize',       emoji: '\uD83D\uDCE6' },
+const TABS: Array<{ id: StudioTab; label: string; emoji: string; requiresJob?: boolean }> = [
+  { id:'upload',      label:'Upload',      emoji:'\uD83C\uDFA4' },
+  { id:'mixer',       label:'Mixer',       emoji:'\uD83C\uDF9B\uFE0F', requiresJob:true },
+  { id:'flow',        label:'Flow',        emoji:'\uD83D\uDCCA', requiresJob:true },
+  { id:'vocals',      label:'Vocals',      emoji:'\uD83C\uDFB6', requiresJob:true },
+  { id:'packs',       label:'Packs',       emoji:'\uD83D\uDCE6' },
+  { id:'voices',      label:'Voices',      emoji:'\uD83C\uDFD9\uFE0F' },
+  { id:'marketplace', label:'Marketplace', emoji:'\uD83D\uDECD\uFE0F' },
+  { id:'versions',    label:'Versions',    emoji:'\uD83C\uDFB5', requiresJob:true },
+  { id:'finalize',    label:'Finalize',    emoji:'\uD83D\uDCBE', requiresJob:true },
 ];
 
-const WORKER_LABELS: Record<string, string> = {
+const WORKER_LABELS: Record<string,string> = {
   'whisper-timing':'Timing','melody-extraction':'Melody','bpm-groove':'BPM',
   'style-classifier':'Style','riddim-generator':'Generate',
   'stem-assembler':'Assemble','fingerprint-validator':'Validate',
 };
-const WORKER_ORDER = [
-  'whisper-timing','melody-extraction','bpm-groove','style-classifier',
-  'riddim-generator','stem-assembler','fingerprint-validator',
-];
-
+const WORKER_ORDER = ['whisper-timing','melody-extraction','bpm-groove','style-classifier','riddim-generator','stem-assembler','fingerprint-validator'];
 const FX_OPTIONS = ['dry','slapback','dub','reverb','delay','telephone'];
 const VOICE_STYLES = ['deejay','singjay','chant','toasting','spoken'];
 const VOICE_IDS = [
-  { id: 'mock-voice',    label: 'Mock (no API key)' },
-  { id: '21m00Tcm4TlvDq8ikWAM', label: '11Labs — Rachel' },
-  { id: 'AZnzlk1XvdvUeBnXmlld', label: '11Labs — Domi' },
-  { id: 'EXAVITQu4vr4xnSDxMaL', label: '11Labs — Bella' },
-  { id: 'ErXwobaYiN019PkySvjV', label: '11Labs — Antoni' },
+  { id:'mock-voice', label:'Mock (no API key)' },
+  { id:'21m00Tcm4TlvDq8ikWAM', label:'11Labs \u2014 Rachel' },
+  { id:'AZnzlk1XvdvUeBnXmlld', label:'11Labs \u2014 Domi' },
+  { id:'ErXwobaYiN019PkySvjV',  label:'11Labs \u2014 Antoni' },
 ];
+const ITEM_TYPES = ['','riddim','stem','voice','hook','pack'];
 
 // ---- Pocket Grid ----
 function PocketGrid({ bars }: { bars: any[] }) {
-  const zoneColor: Record<string,string> = {
-    hit:'bg-green-500', accent:'bg-yellow-400', breath:'bg-blue-400', rest:'bg-zinc-700',
-  };
+  const zoneColor: Record<string,string> = { hit:'bg-green-500',accent:'bg-yellow-400',breath:'bg-blue-400',rest:'bg-zinc-700' };
   return (
     <div className="overflow-x-auto">
-      {bars.slice(0,8).map((bar: any) => (
+      {bars.slice(0,8).map((bar:any) => (
         <div key={bar.barIndex} className="flex items-center gap-1 mb-1">
           <span className="text-xs text-zinc-400 w-8">B{bar.barIndex+1}</span>
-          {bar.zones.map((z: any) => (
+          {bar.zones.map((z:any) => (
             <div key={z.stepIndex} title={z.zoneType}
               className={`w-4 h-4 rounded-sm ${zoneColor[z.zoneType]??'bg-zinc-700'}`}
-              style={{ opacity: 0.3+z.strength*0.7 }} />
+              style={{opacity:0.3+z.strength*0.7}} />
           ))}
         </div>
       ))}
-      <div className="flex gap-3 mt-2 text-xs text-zinc-400">
-        <span><span className="inline-block w-3 h-3 rounded-sm bg-green-500 mr-1" />Hit</span>
-        <span><span className="inline-block w-3 h-3 rounded-sm bg-yellow-400 mr-1" />Accent</span>
-        <span><span className="inline-block w-3 h-3 rounded-sm bg-blue-400 mr-1" />Breath</span>
-        <span><span className="inline-block w-3 h-3 rounded-sm bg-zinc-700 mr-1" />Rest</span>
-      </div>
     </div>
   );
 }
 
 // ---- Hook Ideas Panel ----
-function HookIdeasPanel({ hookIdeas, onApply }: { hookIdeas: any; onApply: (id: string) => void }) {
+function HookIdeasPanel({ hookIdeas, onApply }: { hookIdeas:any; onApply:(id:string)=>void }) {
   if (!hookIdeas) return <p className="text-zinc-400 text-sm">No hook ideas yet.</p>;
   return (
     <div className="space-y-3">
       <p className="text-xs text-zinc-400 italic">{hookIdeas.chorusContrast}</p>
-      {hookIdeas.templates.map((t: any) => (
+      {hookIdeas.templates.map((t:any) => (
         <div key={t.id} className="bg-zinc-800 rounded-lg p-3 border border-zinc-700">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-sm font-medium text-white">{t.name}</span>
+            <span className="text-sm font-medium">{t.name}</span>
             <span className="text-xs px-2 py-0.5 rounded bg-zinc-600 text-zinc-300">{t.sectionType}</span>
           </div>
-          <p className="text-xs text-zinc-400 mb-2">{t.description}</p>
-          <div className="flex gap-0.5 mb-2">
-            {t.pattern.map((v: number, i: number) => (
-              <div key={i} className={`w-3 h-3 rounded-sm ${v?'bg-green-400':'bg-zinc-700'} ${t.accentSteps.includes(i)?'ring-1 ring-yellow-400':''}`} />
-            ))}
-          </div>
-          <button onClick={() => onApply(t.id)}
-            className="mt-1 w-full py-1.5 rounded-md bg-green-600 hover:bg-green-500 text-white text-xs font-medium transition-colors">
-            Apply to Riddim
-          </button>
+          <div className="flex gap-0.5 mb-2">{t.pattern.map((v:number,i:number) => (
+            <div key={i} className={`w-3 h-3 rounded-sm ${v?'bg-green-400':'bg-zinc-700'}`} />
+          ))}</div>
+          <button onClick={()=>onApply(t.id)} className="w-full py-1.5 rounded-md bg-green-600 hover:bg-green-500 text-white text-xs font-medium">Apply to Riddim</button>
         </div>
       ))}
     </div>
@@ -97,116 +82,195 @@ function HookIdeasPanel({ hookIdeas, onApply }: { hookIdeas: any; onApply: (id: 
 }
 
 // ---- Vocals Tab ----
-function VocalsTab({ jobId, artistId }: { jobId: string; artistId: string }) {
+function VocalsTab({ jobId, artistId }: { jobId:string; artistId:string }) {
   const [voiceId, setVoiceId] = useState('mock-voice');
   const [vocalStyle, setVocalStyle] = useState('deejay');
   const [fxPreset, setFxPreset] = useState('dub');
   const [templateId, setTemplateId] = useState('hook-chorus-main');
   const [generating, setGenerating] = useState(false);
   const [demos, setDemos] = useState<any[]>([]);
-  const [pollError, setPollError] = useState('');
-
+  const [err, setErr] = useState('');
   const fetchDemos = useCallback(async () => {
-    const r = await fetch('/api/vocals/get-vocal?jobId=' + jobId).then(x => x.json()).catch(() => null);
+    const r = await fetch('/api/vocals/get-vocal?jobId='+jobId).then(x=>x.json()).catch(()=>null);
     if (r?.demos) setDemos(r.demos);
   }, [jobId]);
-
-  useEffect(() => { fetchDemos(); }, [fetchDemos]);
-
+  useEffect(()=>{ fetchDemos(); },[fetchDemos]);
   const handleGenerate = async () => {
-    setGenerating(true); setPollError('');
+    setGenerating(true); setErr('');
     try {
-      const r = await fetch('/api/vocals/generate-hook', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobId, artistId, templateId, fxPreset, voiceConfig: { voiceId, vocalStyle } }),
-      }).then(x => x.json());
+      const r = await fetch('/api/vocals/generate-hook',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jobId,artistId,templateId,fxPreset,voiceConfig:{voiceId,vocalStyle}})}).then(x=>x.json());
       if (r.error) throw new Error(r.error);
-      // Poll until completed
-      let attempts = 0;
-      const poll = setInterval(async () => {
-        attempts++;
-        await fetchDemos();
-        const done = demos.some(d => d.templateId === templateId && d.status === 'completed');
-        if (done || attempts > 20) { clearInterval(poll); setGenerating(false); }
-      }, 2000);
-    } catch (e: any) { setPollError(e.message); setGenerating(false); }
+      let attempts=0;
+      const poll = setInterval(async()=>{ attempts++; await fetchDemos(); if(attempts>20){clearInterval(poll);setGenerating(false);} },2000);
+    } catch(e:any) { setErr(e.message); setGenerating(false); }
   };
-
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <h2 className="text-lg font-semibold">\uD83C\uDFB6 Vocal Hook Demo</h2>
-
-      {/* Controls */}
       <div className="bg-zinc-800 rounded-xl p-5 space-y-4 border border-zinc-700">
         <div className="grid grid-cols-2 gap-4">
-          <label className="block">
-            <span className="text-xs text-zinc-400 block mb-1">Voice Model</span>
-            <select value={voiceId} onChange={e => setVoiceId(e.target.value)}
-              className="w-full bg-zinc-700 text-white rounded-md px-3 py-2 text-sm border border-zinc-600">
-              {VOICE_IDS.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
-            </select>
-          </label>
-          <label className="block">
-            <span className="text-xs text-zinc-400 block mb-1">Vocal Style</span>
-            <select value={vocalStyle} onChange={e => setVocalStyle(e.target.value)}
-              className="w-full bg-zinc-700 text-white rounded-md px-3 py-2 text-sm border border-zinc-600">
-              {VOICE_STYLES.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </label>
-          <label className="block">
-            <span className="text-xs text-zinc-400 block mb-1">FX Chain</span>
-            <select value={fxPreset} onChange={e => setFxPreset(e.target.value)}
-              className="w-full bg-zinc-700 text-white rounded-md px-3 py-2 text-sm border border-zinc-600">
-              {FX_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
-            </select>
-          </label>
-          <label className="block">
-            <span className="text-xs text-zinc-400 block mb-1">Hook Template</span>
-            <select value={templateId} onChange={e => setTemplateId(e.target.value)}
-              className="w-full bg-zinc-700 text-white rounded-md px-3 py-2 text-sm border border-zinc-600">
-              <option value="hook-chorus-main">Main Chorus</option>
-              <option value="hook-verse-flow">Verse Flow</option>
-              <option value="hook-bridge">Bridge</option>
-              <option value="hook-intro">Intro Build</option>
-              <option value="hook-outro">Outro Fade</option>
-            </select>
-          </label>
-        </div>
-        <button onClick={handleGenerate} disabled={generating}
-          className="w-full py-3 rounded-lg bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-semibold text-sm transition-colors">
-          {generating ? 'Generating...' : 'Generate Hook Demo'}
-        </button>
-        {pollError && <p className="text-red-400 text-xs">{pollError}</p>}
-      </div>
-
-      {/* Demo list */}
-      {demos.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="text-sm font-medium text-zinc-300">Generated Demos</h3>
-          {demos.map((d, i) => (
-            <div key={i} className="bg-zinc-800 rounded-lg p-4 border border-zinc-700 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">{d.templateId}</span>
-                <span className={`text-xs px-2 py-0.5 rounded ${d.status==='completed'?'bg-green-900 text-green-300':d.status==='failed'?'bg-red-900 text-red-300':'bg-zinc-700 text-zinc-400'}`}>
-                  {d.status}
-                </span>
-              </div>
-              <div className="text-xs text-zinc-400 flex gap-4">
-                <span>Style: {d.voiceConfig?.vocalStyle}</span>
-                <span>FX: {d.fxChain?.chain?.[0]?.fxType}</span>
-                <span>{Math.round((d.durationMs??0)/1000)}s</span>
-              </div>
-              {d.status === 'completed' && (
-                <audio controls className="w-full mt-1" src={d.wavUrl}>
-                  Your browser does not support audio.
-                </audio>
-              )}
-              {d.error && <p className="text-red-400 text-xs">{d.error}</p>}
-            </div>
+          {[['Voice Model',voiceId,setVoiceId,VOICE_IDS.map(v=>({v:v.id,l:v.label}))],['Vocal Style',vocalStyle,setVocalStyle,VOICE_STYLES.map(s=>({v:s,l:s}))],['FX Chain',fxPreset,setFxPreset,FX_OPTIONS.map(f=>({v:f,l:f}))],['Template',templateId,setTemplateId,[{v:'hook-chorus-main',l:'Chorus'},{v:'hook-verse-flow',l:'Verse'},{v:'hook-bridge',l:'Bridge'},{v:'hook-intro',l:'Intro'},{v:'hook-outro',l:'Outro'}]]].map(([label,val,setter,opts]:any) => (
+            <label key={label} className="block">
+              <span className="text-xs text-zinc-400 block mb-1">{label}</span>
+              <select value={val} onChange={e=>setter(e.target.value)} className="w-full bg-zinc-700 text-white rounded-md px-3 py-2 text-sm border border-zinc-600">
+                {opts.map((o:any)=><option key={o.v} value={o.v}>{o.l}</option>)}
+              </select>
+            </label>
           ))}
         </div>
-      )}
+        <button onClick={handleGenerate} disabled={generating} className="w-full py-3 rounded-lg bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-semibold text-sm">{generating?'Generating...':'Generate Hook Demo'}</button>
+        {err && <p className="text-red-400 text-xs">{err}</p>}
+      </div>
+      {demos.length>0 && <div className="space-y-3">{demos.map((d,i)=>(
+        <div key={i} className="bg-zinc-800 rounded-lg p-4 border border-zinc-700 space-y-2">
+          <div className="flex items-center justify-between"><span className="text-sm font-medium">{d.templateId}</span><span className={`text-xs px-2 py-0.5 rounded ${d.status==='completed'?'bg-green-900 text-green-300':'bg-zinc-700 text-zinc-400'}`}>{d.status}</span></div>
+          {d.status==='completed' && <audio controls className="w-full" src={d.wavUrl} />}
+          {d.error && <p className="text-red-400 text-xs">{d.error}</p>}
+        </div>
+      ))}</div>}
+    </div>
+  );
+}
+
+// ---- Packs Tab ----
+function PacksTab({ artistId, jobId }: { artistId:string; jobId?:string }) {
+  const [packs, setPacks] = useState<any[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [msg, setMsg] = useState('');
+  useEffect(() => {
+    fetch('/api/packs/list?artistId='+artistId).then(r=>r.json()).then(d=>{ if(d.packs) setPacks(d.packs); }).catch(()=>{});
+  },[artistId]);
+  const handleCreate = async () => {
+    if (!jobId) return;
+    setCreating(true); setMsg('');
+    try {
+      const r = await fetch('/api/packs/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({artistId,jobIds:[jobId]})}).then(x=>x.json());
+      if (r.error) throw new Error(r.error);
+      setPacks(p=>[r,...p]); setMsg('Pack created: '+r.packId.slice(0,8));
+    } catch(e:any){setMsg('Error: '+e.message);} finally{setCreating(false);}
+  };
+  return (
+    <div className="max-w-2xl mx-auto space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">\uD83D\uDCE6 Artist Packs</h2>
+        {jobId && <button onClick={handleCreate} disabled={creating} className="px-4 py-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium">{creating?'Creating...':'Bundle Current Job'}</button>}
+      </div>
+      {msg && <p className="text-xs text-zinc-400">{msg}</p>}
+      {packs.length===0 && <p className="text-zinc-400 text-sm">No packs yet. Upload and process a job, then bundle it here.</p>}
+      {packs.map((p:any)=>(
+        <div key={p.packId} className="bg-zinc-800 rounded-xl p-4 border border-zinc-700 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-semibold">{p.name}</div>
+              <div className="text-xs text-zinc-400 font-mono">{p.packId.slice(0,8)} \u2022 {p.jobIds.length} job(s)</div>
+            </div>
+            <div className="text-right text-xs text-zinc-400">
+              <div>BPM {p.bpmRange?.min}\u2013{p.bpmRange?.max}</div>
+              <div>{(p.totalDurationMs/1000).toFixed(1)}s</div>
+            </div>
+          </div>
+          {p.assets?.stemUrls?.length>0 && (
+            <div>
+              <div className="text-xs text-zinc-400 mb-1">Stems ({p.assets.stemUrls.length})</div>
+              <div className="flex flex-wrap gap-2">{p.assets.stemUrls.map((u:string,i:number)=>(
+                <a key={i} href={u} download className="text-xs px-2 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-zinc-300">\uD83D\uDD0A Stem {i+1}</a>
+              ))}</div>
+            </div>
+          )}
+          {p.assets?.vocalDemoUrls?.length>0 && (
+            <div>
+              <div className="text-xs text-zinc-400 mb-1">Vocal Demos ({p.assets.vocalDemoUrls.length})</div>
+              <div className="space-y-1">{p.assets.vocalDemoUrls.map((u:string,i:number)=>(
+                <audio key={i} controls className="w-full" src={u} />
+              ))}</div>
+            </div>
+          )}
+          {p.styles?.length>0 && <div className="flex gap-2">{p.styles.map((s:string)=>(<span key={s} className="text-xs px-2 py-0.5 bg-zinc-700 text-zinc-300 rounded">{s}</span>))}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---- Voices Tab ----
+function VoicesTab({ onApply }: { onApply:(voiceId:string,style:string,fx:string)=>void }) {
+  const [packs, setPacks] = useState<any[]>([]);
+  const [previewIdx, setPreviewIdx] = useState<string|null>(null);
+  useEffect(()=>{ fetch('/api/voices/list').then(r=>r.json()).then(d=>{ if(d.packs) setPacks(d.packs); }).catch(()=>{}); },[]);
+  return (
+    <div className="max-w-2xl mx-auto space-y-4">
+      <h2 className="text-lg font-semibold">\uD83C\uDFD9\uFE0F Voice Packs</h2>
+      {packs.length===0 && <p className="text-zinc-400 text-sm">Loading voice packs...</p>}
+      {packs.map((p:any)=>(
+        <div key={p.packId} className="bg-zinc-800 rounded-xl p-4 border border-zinc-700 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-semibold">{p.name}</div>
+              <div className="text-xs text-zinc-400 mt-0.5">{p.description}</div>
+            </div>
+            <div className="flex gap-2">{p.tags.map((t:string)=>(<span key={t} className="text-xs px-2 py-0.5 bg-zinc-600 text-zinc-300 rounded">{t}</span>))}</div>
+          </div>
+          {p.previewUrl && previewIdx===p.packId && <audio autoPlay controls className="w-full" src={p.previewUrl} />}
+          <div className="flex gap-2">
+            {p.previewUrl && <button onClick={()=>setPreviewIdx(prev=>prev===p.packId?null:p.packId)} className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded text-xs">{previewIdx===p.packId?'Stop':'\u25B6 Preview'}</button>}
+            <button onClick={()=>onApply(p.voices[0]?.voiceId??'mock-voice',p.voices[0]?.vocalStyle??'deejay',p.defaultFxPreset??'dub')} className="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded text-xs font-medium">Apply to Vocals</button>
+          </div>
+          <div className="space-y-1">{p.voices.map((v:any,i:number)=>(
+            <div key={i} className="flex items-center justify-between text-xs bg-zinc-900 rounded px-3 py-2">
+              <span className="text-zinc-300">{v.vocalStyle}</span>
+              <span className="text-zinc-500 font-mono">{v.provider} / {v.voiceId.slice(0,12)}...</span>
+            </div>
+          ))}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---- Marketplace Tab ----
+function MarketplaceTab() {
+  const [items, setItems] = useState<any[]>([]);
+  const [typeFilter, setTypeFilter] = useState('');
+  const [loading, setLoading] = useState(false);
+  useEffect(()=>{
+    setLoading(true);
+    const q = typeFilter ? '?type='+typeFilter : '';
+    fetch('/api/marketplace/list'+q).then(r=>r.json()).then(d=>{ if(d.items) setItems(d.items); }).catch(()=>{}).finally(()=>setLoading(false));
+  },[typeFilter]);
+  return (
+    <div className="max-w-3xl mx-auto space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">\uD83D\uDECD\uFE0F Marketplace</h2>
+        <div className="flex gap-2">{ITEM_TYPES.map(t=>(
+          <button key={t} onClick={()=>setTypeFilter(t)} className={`px-3 py-1 rounded text-xs font-medium ${typeFilter===t?'bg-green-600 text-white':'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>{t||'All'}</button>
+        ))}</div>
+      </div>
+      {loading && <p className="text-zinc-400 text-sm">Loading...</p>}
+      {!loading && items.length===0 && <p className="text-zinc-400 text-sm">No items listed yet. Create packs and register them to the marketplace.</p>}
+      <div className="grid grid-cols-2 gap-4">{items.map((item:any)=>(
+        <div key={item.itemId} className="bg-zinc-800 rounded-xl p-4 border border-zinc-700 space-y-2">
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="font-semibold text-sm">{item.title}</div>
+              <div className="text-xs text-zinc-400 mt-0.5">{item.description}</div>
+            </div>
+            {item.featured && <span className="text-xs px-1.5 py-0.5 bg-yellow-600 text-white rounded">Featured</span>}
+          </div>
+          <div className="flex items-center gap-2 text-xs text-zinc-400">
+            <span className="px-1.5 py-0.5 bg-zinc-700 rounded">{item.type}</span>
+            {item.bpm && <span>{item.bpm} BPM</span>}
+            {item.style && <span>{item.style}</span>}
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-bold text-green-400">{item.price===0?'Free':'$'+(item.price/100).toFixed(2)}</span>
+            <div className="flex gap-2">
+              {item.previewUrl && <a href={item.previewUrl} className="text-xs px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded">\u25B6 Preview</a>}
+              {item.downloadUrl && <a href={'/api/marketplace/get?itemId='+item.itemId+'&download=true'} className="text-xs px-2 py-1 bg-green-700 hover:bg-green-600 text-white rounded">\u2193 Get</a>}
+            </div>
+          </div>
+          <div className="text-xs text-zinc-500">{item.downloadCount} downloads</div>
+        </div>
+      ))}</div>
     </div>
   );
 }
@@ -219,39 +283,40 @@ export default function RiddimStudio() {
   const [pocketData, setPocketData] = useState<any>(null);
   const [hookIdeas, setHookIdeas] = useState<any>(null);
   const [flowLoading, setFlowLoading] = useState(false);
-  const [appliedTemplate, setAppliedTemplate] = useState<string | null>(null);
+  const [appliedTemplate, setAppliedTemplate] = useState<string|null>(null);
   const artistId = 'default-artist';
 
   const { jobId, status, progress, completedWorkers, pendingWorkers, results, error, uploadAudio, reset } = useJobPoller({
-    onComplete: () => setActiveTab('mixer'),
-    onError: (e) => console.error('[Studio]', e),
+    onComplete: ()=>setActiveTab('mixer'),
+    onError: (e)=>console.error('[Studio]',e),
   });
 
-  useEffect(() => {
-    if (activeTab !== 'flow' || !jobId || pocketData) return;
+  useEffect(()=>{
+    if (activeTab!=='flow'||!jobId||pocketData) return;
     setFlowLoading(true);
     Promise.all([
-      fetch('/api/artist/get-pocket-map?jobId=' + jobId).then(r => r.json()),
-      fetch('/api/artist/get-hook-ideas?jobId=' + jobId).then(r => r.json()),
-    ]).then(([pm, hi]) => { setPocketData(pm); setHookIdeas(hi?.hookIdeas ?? null); })
-      .catch(console.error).finally(() => setFlowLoading(false));
-  }, [activeTab, jobId, pocketData]);
+      fetch('/api/artist/get-pocket-map?jobId='+jobId).then(r=>r.json()),
+      fetch('/api/artist/get-hook-ideas?jobId='+jobId).then(r=>r.json()),
+    ]).then(([pm,hi])=>{ setPocketData(pm); setHookIdeas(hi?.hookIdeas??null); })
+      .catch(console.error).finally(()=>setFlowLoading(false));
+  },[activeTab,jobId,pocketData]);
 
-  const handleFile = useCallback(async (file: File) => {
+  const handleFile = useCallback(async (file:File)=>{
     const ext = file.name.split('.').pop()?.toLowerCase();
-    if (ext !== 'wav' && ext !== 'mp3') { alert('Upload .wav or .mp3'); return; }
+    if (ext!=='wav'&&ext!=='mp3'){alert('Upload .wav or .mp3');return;}
     await uploadAudio(file);
-  }, [uploadAudio]);
+  },[uploadAudio]);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDrop = useCallback((e:React.DragEvent)=>{
     e.preventDefault(); setDragActive(false);
-    const f = e.dataTransfer.files?.[0]; if (f) handleFile(f);
-  }, [handleFile]);
+    const f=e.dataTransfer.files?.[0]; if(f) handleFile(f);
+  },[handleFile]);
 
   const isTabLocked = (tab: StudioTab) => {
-    if (tab === 'upload') return false;
+    const def = TABS.find(t=>t.id===tab);
+    if (!def?.requiresJob) return false;
     if (!jobId) return true;
-    return status !== 'completed';
+    return status!=='completed';
   };
 
   return (
@@ -261,29 +326,24 @@ export default function RiddimStudio() {
         <header className="border-b border-zinc-800 px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="text-2xl">\uD83C\uDFB5</span>
-            <h1 className="text-xl font-bold tracking-tight">Riddim Studio</h1>
+            <h1 className="text-xl font-bold">Riddim Studio</h1>
             {jobId && <span className="text-xs bg-zinc-800 text-zinc-400 px-2 py-1 rounded font-mono">{jobId.slice(0,8)}</span>}
           </div>
-          {jobId && (
-            <button onClick={() => { reset(); setActiveTab('upload'); setPocketData(null); setHookIdeas(null); }}
-              className="text-xs text-zinc-400 hover:text-white transition-colors">New Session</button>
-          )}
+          {jobId && <button onClick={()=>{reset();setActiveTab('upload');setPocketData(null);setHookIdeas(null);}} className="text-xs text-zinc-400 hover:text-white">New Session</button>}
         </header>
-        <nav className="border-b border-zinc-800 px-6 flex gap-1">
-          {TABS.map(tab => {
-            const locked = isTabLocked(tab.id);
-            return (
-              <button key={tab.id} onClick={() => !locked && setActiveTab(tab.id)} disabled={locked}
-                className={['px-4 py-3 text-sm font-medium border-b-2 transition-colors',
-                  activeTab===tab.id?'border-green-400 text-green-400':'border-transparent text-zinc-400',
-                  locked?'opacity-30 cursor-not-allowed':'hover:text-white cursor-pointer'].join(' ')}
-              >{tab.emoji} {tab.label}</button>
-            );
+        <nav className="border-b border-zinc-800 px-4 flex gap-0.5 overflow-x-auto">
+          {TABS.map(tab=>{
+            const locked=isTabLocked(tab.id);
+            return <button key={tab.id} onClick={()=>!locked&&setActiveTab(tab.id)} disabled={locked}
+              className={['px-3 py-3 text-xs font-medium border-b-2 whitespace-nowrap transition-colors',
+                activeTab===tab.id?'border-green-400 text-green-400':'border-transparent text-zinc-400',
+                locked?'opacity-30 cursor-not-allowed':'hover:text-white cursor-pointer'].join(' ')}
+            >{tab.emoji} {tab.label}</button>;
           })}
         </nav>
         <main className="flex-1 p-6">
 
-          {activeTab === 'upload' && (
+          {activeTab==='upload' && (
             <div className="max-w-lg mx-auto">
               <div onDragOver={e=>{e.preventDefault();setDragActive(true);}} onDragLeave={()=>setDragActive(false)}
                 onDrop={handleDrop} onClick={()=>fileInputRef.current?.click()}
@@ -293,26 +353,13 @@ export default function RiddimStudio() {
                 <div className="text-5xl mb-4">\uD83C\uDFA4</div>
                 <p className="text-lg font-medium mb-1">Drop your hum here</p>
                 <p className="text-sm text-zinc-400">.wav or .mp3 up to 50MB</p>
-                <input ref={fileInputRef} type="file" accept=".wav,.mp3" className="hidden"
-                  onChange={e=>{const f=e.target.files?.[0];if(f)handleFile(f);}} />
+                <input ref={fileInputRef} type="file" accept=".wav,.mp3" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f)handleFile(f);}} />
               </div>
               {status==='processing' && (
                 <div className="mt-6 space-y-3">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-zinc-300">Pipeline running...</span>
-                    <span className="text-green-400">{progress}%</span>
-                  </div>
-                  <div className="w-full bg-zinc-800 rounded-full h-2">
-                    <div className="bg-green-500 h-2 rounded-full transition-all" style={{width:progress+'%'}} />
-                  </div>
-                  <div className="grid grid-cols-4 gap-2">
-                    {WORKER_ORDER.map(w=>(
-                      <div key={w} className={['rounded px-2 py-1 text-center text-xs',
-                        completedWorkers.includes(w)?'bg-green-900 text-green-300':
-                        pendingWorkers.includes(w)?'bg-zinc-700 text-zinc-300':'bg-zinc-800 text-zinc-500'].join(' ')}
-                      >{WORKER_LABELS[w]}</div>
-                    ))}
-                  </div>
+                  <div className="flex justify-between text-sm"><span>Pipeline running...</span><span className="text-green-400">{progress}%</span></div>
+                  <div className="w-full bg-zinc-800 rounded-full h-2"><div className="bg-green-500 h-2 rounded-full transition-all" style={{width:progress+'%'}} /></div>
+                  <div className="grid grid-cols-4 gap-2">{WORKER_ORDER.map(w=>(<div key={w} className={['rounded px-2 py-1 text-center text-xs',completedWorkers.includes(w)?'bg-green-900 text-green-300':pendingWorkers.includes(w)?'bg-zinc-700 text-zinc-300':'bg-zinc-800 text-zinc-500'].join(' ')}>{WORKER_LABELS[w]}</div>))}</div>
                 </div>
               )}
               {error && <p className="mt-4 text-red-400 text-sm">Error: {error}</p>}
@@ -328,18 +375,10 @@ export default function RiddimStudio() {
                 {flowLoading && <p className="text-zinc-400 text-sm">Analysing...</p>}
                 {!flowLoading && pocketData?.pocketMap && (
                   <div className="space-y-4">
-                    <div className="flex gap-4 text-sm">
-                      {[['Pocket',pocketData.pocketMap.globalPocketPosition],['BPM',pocketData.pocketMap.bpm],['Bars',pocketData.pocketMap.totalBars]].map(([k,v])=>(
-                        <div key={String(k)} className="bg-zinc-800 rounded-lg p-4 flex-1 text-center">
-                          <div className="text-zinc-400 text-xs mb-1">{k}</div>
-                          <div className="text-xl font-bold text-green-400 capitalize">{v}</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="bg-zinc-800 rounded-lg p-4">
-                      <h3 className="text-sm font-medium mb-3">Per-Bar Grid</h3>
-                      <PocketGrid bars={pocketData.pocketMap.bars??[]} />
-                    </div>
+                    <div className="flex gap-4">{[['Pocket',pocketData.pocketMap.globalPocketPosition],['BPM',pocketData.pocketMap.bpm],['Bars',pocketData.pocketMap.totalBars]].map(([k,v])=>(
+                      <div key={String(k)} className="bg-zinc-800 rounded-lg p-4 flex-1 text-center"><div className="text-zinc-400 text-xs mb-1">{k}</div><div className="text-xl font-bold text-green-400 capitalize">{v}</div></div>
+                    ))}</div>
+                    <div className="bg-zinc-800 rounded-lg p-4"><h3 className="text-sm font-medium mb-3">Per-Bar Grid</h3><PocketGrid bars={pocketData.pocketMap.bars??[]} /></div>
                   </div>
                 )}
               </div>
@@ -352,6 +391,12 @@ export default function RiddimStudio() {
           )}
 
           {activeTab==='vocals' && jobId && <VocalsTab jobId={jobId} artistId={artistId} />}
+
+          {activeTab==='packs' && <PacksTab artistId={artistId} jobId={status==='completed'?jobId:undefined} />}
+
+          {activeTab==='voices' && <VoicesTab onApply={(vid,vs,fx)=>{ console.log('Voice applied:',vid,vs,fx); setActiveTab('vocals'); }} />}
+
+          {activeTab==='marketplace' && <MarketplaceTab />}
 
           {activeTab==='versions' && jobId && <VersionGenerator jobId={jobId} results={results} />}
 
