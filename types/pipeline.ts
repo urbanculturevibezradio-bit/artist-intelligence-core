@@ -345,3 +345,64 @@ export interface ArtistProfileSummary {
   preferences: ArtistPreferencesPublic;
   totalSessions: number;
 }
+
+// ---- Vocal Engine (Phase 4) ----
+export interface Phoneme {
+  symbol: string;
+  durationMs: number;
+  stepIndex: number;
+  strength: number;
+  isAccent: boolean;
+}
+
+export interface PhonemeSequence {
+  jobId: string;
+  phonemes: Phoneme[];
+  totalDurationMs: number;
+  bpm: number;
+  templateId: string;
+}
+
+export type VoiceModelProvider = '11labs' | 'local' | 'mock';
+export type VocalStyle = 'deejay' | 'singjay' | 'chant' | 'toasting' | 'spoken';
+
+export interface VoiceModelConfig {
+  provider: VoiceModelProvider;
+  voiceId: string;
+  vocalStyle: VocalStyle;
+  stability: number;
+  similarityBoost: number;
+  modelId?: string;
+}
+
+export type FXType = 'reverb' | 'delay' | 'slapback' | 'telephone' | 'dub' | 'chorus' | 'dry';
+
+export interface FXParam {
+  fxType: FXType;
+  wetDry: number;
+  decayMs?: number;
+  delayMs?: number;
+  feedback?: number;
+  cutoffHz?: number;
+  modDepth?: number;
+}
+
+export interface VocalFXChain {
+  chain: FXParam[];
+  masterGain: number;
+  preDelay?: number;
+}
+
+export interface VocalDemo {
+  jobId: string;
+  artistId: string;
+  templateId: string;
+  phonemeSequence: PhonemeSequence;
+  voiceConfig: VoiceModelConfig;
+  fxChain: VocalFXChain;
+  wavUrl: string;
+  durationMs: number;
+  generatedAt: Date;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  error?: string;
+}
