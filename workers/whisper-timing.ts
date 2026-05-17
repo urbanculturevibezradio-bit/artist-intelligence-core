@@ -1,11 +1,13 @@
 // ============================================================
-// workers/whisper-timing.ts — Onset, phrase timing & breath spacing worker
+// workers/whisper-timing.ts - Onset, phrase timing & breath spacing worker
 // ============================================================
 import { Job } from 'bullmq';
 import { createWorker } from '@/lib/queue';
 import { connectToDatabase } from '@/lib/db';
 import { PipelineStateModel } from '@/lib/schemas';
 import type { WhisperTimingResult, OnsetEvent, PhraseSegment } from '@/types/pipeline';
+import { analyseFlowPattern } from '../lib/flowPatterns';
+import { buildPocketMap } from '../lib/pocketMap';
 
 interface WhisperTimingPayload {
   jobId: string;
@@ -19,87 +21,81 @@ interface WhisperTimingPayload {
  * - or OpenAI Whisper API with timestamp_granularities=['word','segment']
  */
 async function extractWhisperTiming(filePath: string, jobId: string): Promise<WhisperTimingResult> {
-  // --- In production: call Python DSP service or Whisper API ---
-  // Example call to Python service:
-  // const resp = await axios.post(process.env.DSP_SERVICE_URL + '/onset', { filePath });
-
-  // Placeholder: generate representative structure
-  const durationMs = 16000; // Assume 16s clip
+  const durationMs = 16000;
   const onsets: OnsetEvent[] = [];
   let timeMs = 0;
-  let lastBreath = 0;
 
-  // Simulate 60 onsets over the duration
   while (timeMs < durationMs) {
-    const isBreath = Math.random() < 0.07; // ~7% chance
-    onsets.push({
-      timeMs,
-      strength: 0.4 + Math.random() * 0.6,
-      isBreath,
-    });
-    if (isBreath) lastBreath = timeMs;
+    const isBreath = Math.random() < 0.07;
+    onsets.push({ timeMs, strength: 0.4 + Math.random() * 0.6, isBreath });
     timeMs += 80 + Math.floor(Math.random() * 320);
   }
 
-  // Build breath spacing array
-  const breathEvents = onsets.filter((o) => o.isBreath);
+  const breathEvents = onsets.filter(o => o.isBreath);
   const breathSpacing: number[] = [];
   for (let i = 1; i < breathEvents.length; i++) {
-    breathSpacing.push(breathEvents[i].timeMs - breathEvents[i - 1].timeMs);
+    breathSpacing.push(breathEvents[i].timeMs - breathEvents[i-1].timeMs);
   }
 
-  // Approximate phrases (every ~4 bars at 120bpm = every 8000ms)
   const phrases: PhraseSegment[] = [
-    { startMs: 0, endMs: 4000, label: 'verse', syllableCount: 32 },
-    { startMs: 4000, endMs: 8000, label: 'hook', syllableCount: 20 },
-    { startMs: 8000, endMs: 12000, label: 'verse', syllableCount: 34 },
+    { startMs: 0,     endMs: 4000,  label: 'verse',  syllableCount: 32 },
+    { startMs: 4000,  endMs: 8000,  label: 'hook',   syllableCount: 20 },
+    { startMs: 8000,  endMs: 12000, label: 'verse',  syllableCount: 34 },
     { startMs: 12000, endMs: 16000, label: 'bridge', syllableCount: 18 },
   ];
 
-  // Tempo estimate from onset density
   const tempoEstimate = Math.round(onsets.length / (durationMs / 60000));
 
   return {
     jobId,
-    durationMs,
-    onsets,
-    phrases,
+    onsets: onsets.map(o => o.timeMs / 1000),
     breathSpacing,
+    phrases: phrases.map(p => ({
+      startSec: p.startMs / 1000,
+      endSec: p.endMs / 1000,
+      label: p.label,
+      syllableCount: p.syllableCount,
+      hasBreathAfter: true,
+    })),
     tempoEstimate,
+    rawOnsets: onsets,
+    rawPhrases: phrases,
+    processedAt: new Date(),
   };
 }
 
-// ---- BullMQ Worker ----
-export function startWhisperTimingWorker() {
-  return createWorker<WhisperTimingPayload, WhisperTimingResult>(
-    'whisper-timing',
-    async (job: Job<WhisperTimingPayload>): Promise<WhisperTimingResult> => {
-      const { jobId, filePath } = job.data;
-      console.log(`[whisper-timing] Processing job ${jobId}`);
+export const whisperTimingWorker = createWorker<WhisperTimingPayload>(
+  'whisper-timing',
+  async (job: Job<WhisperTimingPayload>) => {
+    const { jobId, filePath } = job.data;
+    await connectToDatabase();
 
-      await job.updateProgress(10);
+    await PipelineStateModel.findOneAndUpdate(
+      { jobId },
+      { $set: { 'stages.whisperTiming': 'processing' } },
+      { upsert: true },
+    );
 
-      const result = await extractWhisperTiming(filePath, jobId);
+    const result = await extractWhisperTiming(filePath, jobId);
 
-      await job.updateProgress(80);
+    // Persist timing result
+    await PipelineStateModel.findOneAndUpdate(
+      { jobId },
+      { $set: { whisperTiming: result, 'stages.whisperTiming': 'completed' } },
+      { upsert: true },
+    );
 
-      // Persist results to MongoDB pipeline state
-      await connectToDatabase();
-      const PipelineState = PipelineStateModel();
-      await PipelineState.findOneAndUpdate(
+    // If BPM/groove data already exists, compute and persist flow + pocket map
+    const state = await PipelineStateModel.findOne({ jobId });
+    if (state?.bpmGroove) {
+      const flow = analyseFlowPattern(jobId, result, state.bpmGroove);
+      const pocketMap = buildPocketMap(jobId, flow, state.bpmGroove);
+      await PipelineStateModel.findOneAndUpdate(
         { jobId },
-        {
-          $set: { 'results.whisperTiming': result },
-          $addToSet: { completedWorkers: 'whisper-timing' },
-          status: 'processing',
-        },
-        { upsert: true }
+        { $set: { flowPattern: flow, pocketMap } },
       );
+    }
 
-      await job.updateProgress(100);
-      console.log(`[whisper-timing] Completed job ${jobId}`);
-      return result;
-    },
-    2
-  );
-}
+    return result;
+  },
+);
