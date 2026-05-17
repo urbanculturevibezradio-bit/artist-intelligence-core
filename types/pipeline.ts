@@ -1,0 +1,237 @@
+// ============================================================
+// types/pipeline.ts — Shared TypeScript interfaces & schemas
+// ============================================================
+
+export type AudioFormat = 'wav' | 'mp3';
+export type JobStatus = 'queued' | 'processing' | 'completed' | 'failed';
+
+// ---- Job / Upload ----
+export interface UploadJob {
+  jobId: string;
+  originalFilename: string;
+  format: AudioFormat;
+  tempPath: string;
+  sizeBytes: number;
+  uploadedAt: Date;
+  status: JobStatus;
+  userId?: string;
+}
+
+// ---- Onset / Timing ----
+export interface OnsetEvent {
+  timeMs: number;
+  strength: number; // 0-1
+  isBreath: boolean;
+}
+
+export interface WhisperTimingResult {
+  jobId: string;
+  durationMs: number;
+  onsets: OnsetEvent[];
+  phrases: PhraseSegment[];
+  breathSpacing: number[]; // gaps in ms between breath events
+  tempoEstimate: number; // BPM from onset density
+}
+
+export interface PhraseSegment {
+  startMs: number;
+  endMs: number;
+  label: string; // 'verse', 'hook', 'bridge', etc.
+  syllableCount?: number;
+}
+
+// ---- Melody ----
+export type MusicalKey =
+  | 'C' | 'C#' | 'Db' | 'D' | 'D#' | 'Eb'
+  | 'E' | 'F' | 'F#' | 'Gb' | 'G' | 'G#' | 'Ab'
+  | 'A' | 'A#' | 'Bb' | 'B';
+
+export type MusicalScale = 'major' | 'minor' | 'dorian' | 'mixolydian' | 'pentatonic' | 'chromatic';
+
+export interface PitchPoint {
+  timeMs: number;
+  hz: number;
+  midi: number; // 0-127
+  confidence: number; // 0-1
+}
+
+export interface MelodyExtractionResult {
+  jobId: string;
+  pitchCurve: PitchPoint[];
+  intervals: number[]; // semitone intervals between consecutive notes
+  contour: 'ascending' | 'descending' | 'arch' | 'valley' | 'flat';
+  key: MusicalKey;
+  scale: MusicalScale;
+  rangeHz: { min: number; max: number };
+  dominantNotes: string[]; // note names e.g. ['C4', 'G4']
+}
+
+// ---- BPM / Groove ----
+export type GrooveType = 'straight' | 'swing' | 'shuffle' | 'half-time' | 'double-time';
+
+export interface DownbeatEvent {
+  timeMs: number;
+  barNumber: number;
+  confidence: number;
+}
+
+export interface BpmGrooveResult {
+  jobId: string;
+  bpm: number;
+  bpmConfidence: number;
+  grooveType: GrooveType;
+  swingRatio: number; // 0.5 = straight, 0.67 = triplet swing
+  syncopation: number; // 0-1 score
+  downbeats: DownbeatEvent[];
+  timeSignature: string; // '4/4', '3/4', '6/8'
+}
+
+// ---- Style ----
+export type RiddimStyle =
+  | 'dancehall'
+  | 'reggae'
+  | 'afro-fusion'
+  | 'rub-a-dub'
+  | 'steppa'
+  | 'roots'
+  | 'lovers-rock'
+  | 'bashment'
+  | 'digital-reggae'
+  | 'afrobeats';
+
+export interface StyleClassifierResult {
+  jobId: string;
+  primaryStyle: RiddimStyle;
+  styleScores: Record<RiddimStyle, number>; // 0-1 per style
+  embedding: number[]; // pgvector-ready 512-dim float array
+  confidence: number;
+  subgenreTags: string[];
+}
+
+// ---- Riddim Generation ----
+export interface DrumPattern {
+  kick: number[]; // 16-step grid (0/1)
+  snare: number[];
+  hihat: number[];
+  rimshot: number[];
+  perc: number[];
+  swingAmount: number;
+}
+
+export interface BasslinePattern {
+  notes: Array<{ step: number; midi: number; velocity: number; durationSteps: number }>;
+  octave: number;
+  style: 'reggae-skank' | 'steppa-sub' | 'dancehall-rolling' | 'afro-walking';
+}
+
+export interface ChordVoicing {
+  step: number;
+  notes: number[]; // midi note array
+  duration: string; // '1/4', '1/2', '1/1'
+  velocity: number;
+}
+
+export interface RiddimGenerationRequest {
+  jobId: string;
+  bpm: number;
+  key: MusicalKey;
+  scale: MusicalScale;
+  style: RiddimStyle;
+  bars: number; // number of bars to generate
+  drums: boolean;
+  bassline: boolean;
+  chords: boolean;
+  percussion: boolean;
+  fx: boolean;
+  referenceEmbedding?: number[]; // optional style vector
+}
+
+export interface RiddimGenerationResult {
+  jobId: string;
+  bpm: number;
+  key: MusicalKey;
+  bars: number;
+  drums?: DrumPattern;
+  bassline?: BasslinePattern;
+  chords?: ChordVoicing[];
+  percussionLayers?: DrumPattern[];
+  fxParameters?: FxParameters;
+}
+
+export interface FxParameters {
+  reverb: { wet: number; decay: number };
+  delay: { bpm: number; feedback: number; wet: number };
+  distortion?: { drive: number };
+  filterCutoff?: number; // 20-20000 Hz
+}
+
+// ---- Stem Assembly ----
+export interface StemFile {
+  name: string;
+  path: string;
+  type: 'drums' | 'bass' | 'chords' | 'perc' | 'fx' | 'melody';
+  sampleRate: number;
+  durationMs: number;
+}
+
+export interface RiddimPackage {
+  jobId: string;
+  packagePath: string;
+  stems: StemFile[];
+  masterBpm: number;
+  masterKey: MusicalKey;
+  style: RiddimStyle;
+  createdAt: Date;
+  totalDurationMs: number;
+}
+
+// ---- Fingerprint / Validation ----
+export interface FingerprintValidationResult {
+  jobId: string;
+  passed: boolean;
+  similarityScore: number; // 0-1 cosine similarity vs reference
+  bpmAccuracy: number; // |generated - target| / target
+  styleAccuracy: number; // 0-1
+  issues: ValidationIssue[];
+}
+
+export interface ValidationIssue {
+  type: 'bpm_drift' | 'style_mismatch' | 'key_clash' | 'timing_error' | 'duplicate_detected';
+  severity: 'warning' | 'error';
+  detail: string;
+}
+
+// ---- Worker Queue ----
+export type WorkerName =
+  | 'whisper-timing'
+  | 'melody-extraction'
+  | 'bpm-groove'
+  | 'style-classifier'
+  | 'riddim-generator'
+  | 'stem-assembler'
+  | 'fingerprint-validator';
+
+export interface PipelineJob {
+  jobId: string;
+  worker: WorkerName;
+  payload: unknown;
+  priority?: number;
+  attempts?: number;
+}
+
+export interface PipelineState {
+  jobId: string;
+  uploadedAt: Date;
+  completedWorkers: WorkerName[];
+  results: Partial<{
+    whisperTiming: WhisperTimingResult;
+    melodyExtraction: MelodyExtractionResult;
+    bpmGroove: BpmGrooveResult;
+    styleClassifier: StyleClassifierResult;
+    riddimGeneration: RiddimGenerationResult;
+    stemAssembler: RiddimPackage;
+    fingerprintValidator: FingerprintValidationResult;
+  }>;
+  status: JobStatus;
+  error?: string;
+}
