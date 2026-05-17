@@ -406,3 +406,61 @@ export interface VocalDemo {
   status: 'pending' | 'processing' | 'completed' | 'failed';
   error?: string;
 }
+
+// ---- Packs & Marketplace (Phase 5) ----
+export interface ArtistPackAssets {
+  riddimPackageUrl?: string;
+  stemUrls: string[];
+  flowPatternSummary?: object;
+  pocketMapSummary?: object;
+  hookTemplates: object[];
+  vocalDemoUrls: string[];
+}
+
+export interface ArtistPack {
+  packId: string;
+  artistId: string;
+  name: string;
+  jobIds: string[];
+  assets: ArtistPackAssets;
+  totalDurationMs: number;
+  bpmRange: { min: number; max: number };
+  styles: string[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface VoicePack {
+  packId: string;
+  name: string;
+  description: string;
+  voices: VoiceModelConfig[];
+  tags: string[];
+  previewUrl?: string;
+  defaultFxPreset: FXType;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type MarketplaceItemType = 'riddim' | 'stem' | 'voice' | 'hook' | 'pack';
+
+export interface MarketplaceItem {
+  itemId: string;
+  type: MarketplaceItemType;
+  sourceId: string;
+  title: string;
+  description: string;
+  price: number;
+  currency: string;
+  previewUrl?: string;
+  downloadUrl?: string;
+  tags: string[];
+  bpm?: number;
+  key?: string;
+  style?: string;
+  artistId: string;
+  featured: boolean;
+  downloadCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
