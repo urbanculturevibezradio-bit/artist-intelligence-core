@@ -235,3 +235,113 @@ export interface PipelineState {
   status: JobStatus;
   error?: string;
 }
+
+// ---- Flow Pattern ----
+export interface PhraseSegment {
+  startSec: number;
+  endSec: number;
+  durationSec: number;
+  syllableCount: number;
+  syllableDensity: number;
+  hasBreathAfter: boolean;
+  accentPositions: number[];
+}
+
+export interface FlowPatternProfile {
+  jobId: string;
+  cadence: number;
+  avgSyllableDensity: number;
+  avgPhraseLength: number;
+  avgBreathSpacing: number;
+  syncopationScore: number;
+  accentPlacement: 'downbeat' | 'backbeat' | 'mixed';
+  pocketPosition: 'ahead' | 'on' | 'behind';
+  pocketOffsetMs: number;
+  phrases: PhraseSegment[];
+  totalOnsets: number;
+  analyzedAt: Date;
+}
+
+// ---- Pocket Map ----
+export type ZoneType = 'hit' | 'rest' | 'accent' | 'breath';
+
+export interface PocketZone {
+  stepIndex: number;
+  zoneType: ZoneType;
+  strength: number;
+  pocketOffsetMs: number;
+}
+
+export interface PocketBar {
+  barIndex: number;
+  zones: PocketZone[];
+  dominantZone: ZoneType;
+  avgPocketOffset: number;
+}
+
+export interface PocketMap {
+  jobId: string;
+  bpm: number;
+  totalBars: number;
+  stepDurationMs: number;
+  bars: PocketBar[];
+  globalPocketPosition: 'ahead' | 'on' | 'behind';
+  globalOffsetMs: number;
+  generatedAt: Date;
+}
+
+// ---- Hook Ideas ----
+export type HookSectionType = 'chorus' | 'verse' | 'bridge' | 'intro' | 'outro';
+
+export interface HookRhythmTemplate {
+  id: string;
+  name: string;
+  sectionType: HookSectionType;
+  barLength: number;
+  pattern: number[];
+  accentSteps: number[];
+  restSteps: number[];
+  energyLevel: number;
+  syncopationLevel: number;
+  description: string;
+}
+
+export interface CallAndResponsePattern {
+  callBars: number;
+  responseBars: number;
+  callPattern: number[];
+  responsePattern: number[];
+  callAccents: number[];
+  responseAccents: number[];
+}
+
+export interface HookIdeas {
+  jobId: string;
+  templates: HookRhythmTemplate[];
+  callAndResponse: CallAndResponsePattern[];
+  suggestedBarLengths: number[];
+  chorusContrast: string;
+  generatedAt: Date;
+}
+
+// ---- Artist Profile (summary for API) ----
+export interface ArtistPreferencesPublic {
+  bpmRange: { min: number; max: number };
+  riddimFamilies: string[];
+  swingAmount: number;
+  grooveDepth: number;
+  basslineType: string;
+  chordFlavor: string;
+  energyLevel: number;
+  dominantKey: string;
+  preferredStyles: string[];
+  avgPhraseBars: number;
+  pocketPosition: 'ahead' | 'on' | 'behind';
+}
+
+export interface ArtistProfileSummary {
+  artistId: string;
+  displayName?: string;
+  preferences: ArtistPreferencesPublic;
+  totalSessions: number;
+}
