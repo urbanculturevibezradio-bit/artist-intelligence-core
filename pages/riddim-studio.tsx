@@ -1,5 +1,5 @@
 // ============================================================
-// pages/riddim-studio.tsx - Phase 6: Caribbean Vocal Intelligence
+// pages/riddim-studio.tsx - Phase 7: Artist Memory Engine
 // ============================================================
 'use client';
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -10,7 +10,7 @@ import FinalizeRiddim from '@/components/FinalizeRiddim';
 import { useJobPoller } from '@/hooks/useJobPoller';
 import '@/styles/globals.css';
 
-type StudioTab = 'upload'|'mixer'|'flow'|'vocals'|'packs'|'voices'|'marketplace'|'versions'|'finalize';
+type StudioTab = 'upload'|'mixer'|'flow'|'vocals'|'packs'|'voices'|'marketplace'|'versions'|'finalize'|'memory';
 
 const TABS: Array<{id:StudioTab;label:string;emoji:string;requiresJob?:boolean}> = [
   {id:'upload',label:'Upload',emoji:'\uD83C\uDFA4'},
@@ -22,6 +22,7 @@ const TABS: Array<{id:StudioTab;label:string;emoji:string;requiresJob?:boolean}>
   {id:'marketplace',label:'Marketplace',emoji:'\uD83D\uDECD\uFE0F'},
   {id:'versions',label:'Versions',emoji:'\uD83C\uDFB5',requiresJob:true},
   {id:'finalize',label:'Finalize',emoji:'\uD83D\uDCBE',requiresJob:true},
+  {id:'memory',label:'Artist Memory',emoji:'\uD83E\uDDE0'},
 ];
 
 const WORKER_LABELS:Record<string,string>={'whisper-timing':'Timing','melody-extraction':'Melody','bpm-groove':'BPM','style-classifier':'Style','riddim-generator':'Generate','stem-assembler':'Assemble','fingerprint-validator':'Validate'};
@@ -194,6 +195,7 @@ export default function RiddimStudio() {
           {activeTab==='marketplace'&&<MarketplaceTab/>}
 
           {activeTab==='versions'&&jobId&&<VersionGenerator jobId={jobId} results={results}/>}
+          {activeTab==='memory'&&<ArtistMemoryPanel artistId={artistId}/>}
 
           {activeTab==='finalize'&&jobId&&<FinalizeRiddim jobId={jobId} results={results}/>}
 
@@ -202,3 +204,78 @@ export default function RiddimStudio() {
     </>
   );
 }
+// ============================================================
+// ArtistMemoryPanel — Phase 7
+// ============================================================
+function ArtistMemoryPanel({artistId}:{artistId:string}) {
+    const [memory,setMemory]=useState<any>(null);
+    const [style,setStyle]=useState<any>(null);
+    const [loading,setLoading]=useState(false);
+    const [updating,setUpdating]=useState(false);
+    const [msg,setMsg]=useState('');
+
+    const fetchMemory=async()=>{
+          setLoading(true);
+          const r=await fetch('/api/artist/memory/get?artistId='+artistId).then(x=>x.json()).catch(()=>null);
+          if(r&&!r.error) setMemory(r);
+          setLoading(false);
+    };
+
+    const fetchStyle=async()=>{
+          setLoading(true);
+          const r=await fetch('/api/artist/style/suggest?artistId='+artistId).then(x=>x.json()).catch(()=>null);
+          if(r&&!r.error) setStyle(r);
+          setLoading(false);
+    };
+
+    const updateMemory=async()=>{
+          if(!memory) return;
+          setUpdating(true);setMsg('');
+          const r=await fetch('/api/artist/memory/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({artistId,data:memory})}).then(x=>x.json()).catch(()=>null);
+          if(r?.ok){setMsg('Memory updated!');fetchMemory();}else{setMsg('Update failed');}
+          setUpdating(false);
+    };
+
+    useEffect(()=>{fetchMemory();},[artistId]);
+
+    return (
+          <div className="max-w-2xl mx-auto space-y-6 p-4">
+                <h2 className="text-lg font-semibold text-white">Artist Memory</h2>h2>
+            {loading&&<p className="text-zinc-400 text-sm">Loading...</p>p>}
+            {memory&&(
+                    <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-700 space-y-2">
+                              <div className="grid grid-cols-2 gap-3 text-sm">
+                                          <div><span className="text-zinc-400">Preferred Voice:</span>span><span className="ml-2 text-white">{memory.preferredVoices?.[0]??'—'}</span>span></div>div>
+                                          <div><span className="text-zinc-400">Mode:</span>span><span className="ml-2 text-white">{memory.preferredModes?.[0]??'—'}</span>span></div>div>
+                                          <div><span className="text-zinc-400">Accent:</span>span><span className="ml-2 text-white">{memory.preferredAccentProfiles?.[0]??'—'}</span>span></div>div>
+                                          <div><span className="text-zinc-400">Energy:</span>span><span className="ml-2 text-white">{memory.preferredEnergy!=null?Math.round(memory.preferredEnergy*100)+'%':'—'}</span>span></div>div>
+                                          <div><span className="text-zinc-400">Hook Pattern:</span>span><span className="ml-2 text-white">{memory.hookPatterns?.[0]??'—'}</span>span></div>div>
+                                          <div><span className="text-zinc-400">Flow Pattern:</span>span><span className="ml-2 text-white">{memory.flowPatterns?.[0]??'—'}</span>span></div>div>
+                                          <div><span className="text-zinc-400">Pocket:</span>span><span className="ml-2 text-white">{memory.pocketPreferences?.[0]??'—'}</span>span></div>div>
+                                          <div><span className="text-zinc-400">Sessions:</span>span><span className="ml-2 text-white">{memory.totalSessions??0}</span>span></div>div>
+                              </div>div>
+                      {memory.lyricalThemes?.length>0&&<div className="text-sm"><span className="text-zinc-400">Themes:</span>span><span className="ml-2 text-white">{memory.lyricalThemes.join(', ')}</span>span></div>div>}
+                    </div>div>
+                )}
+            {style&&(
+                    <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-700 space-y-2">
+                              <h3 className="text-sm font-semibold text-zinc-300">Suggested Style Profile</h3>h3>
+                              <div className="grid grid-cols-2 gap-3 text-sm">
+                                          <div><span className="text-zinc-400">Delivery:</span>span><span className="ml-2 text-white">{style.deliveryBias??'—'}</span>span></div>div>
+                                          <div><span className="text-zinc-400">Accent:</span>span><span className="ml-2 text-white">{style.accentTendency??'—'}</span>span></div>div>
+                                          <div><span className="text-zinc-400">Pocket:</span>span><span className="ml-2 text-white">{style.rhythmProfile?.pocketPosition??'—'}</span>span></div>div>
+                                          <div><span className="text-zinc-400">Pattern:</span>span><span className="ml-2 text-white">{style.rhythmProfile?.dominantPattern??'—'}</span>span></div>div>
+                                          <div><span className="text-zinc-400">Chorus Energy:</span>span><span className="ml-2 text-white">{style.energyCurve?.chorus!=null?Math.round(style.energyCurve.chorus*100)+'%':'—'}</span>span></div>div>
+                                          <div><span className="text-zinc-400">Bar Length:</span>span><span className="ml-2 text-white">{style.hookStructure?.preferredBarLength??'—'}</span>span></div>div>
+                              </div>div>
+                    </div>div>
+                )}
+            {msg&&<p className="text-sm text-green-400">{msg}</p>p>}
+                <div className="flex gap-3">
+                        <button onClick={updateMemory} disabled={updating||!memory} className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white text-sm font-medium">{updating?'Updating...':'Update Memory'}</button>button>
+                        <button onClick={fetchStyle} disabled={loading} className="flex-1 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-sm font-medium">{loading?'Loading...':'Suggest Style'}</button>button>
+                </div>div>
+          </div>div>
+        );
+}
+</div>
