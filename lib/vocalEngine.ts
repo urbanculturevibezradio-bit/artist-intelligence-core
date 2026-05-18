@@ -1,6 +1,6 @@
 import type { HookRhythmTemplate } from '../types/pipeline';
 import type { PocketMap, PocketBar } from './pocketMap';
-import type { ArtistPreferences } from './artistMemory';
+import { getArtistMemory } from './artistMemory';
 import { synthesizeCaribbeanSpeech } from './caribbeanVoices';
 import type { VocalMode, AccentProfile } from './caribbeanVoices';
 
@@ -175,4 +175,23 @@ function buildSilentWav(durationMs: number): Buffer {
   buf.writeUInt32LE(sr,24); buf.writeUInt32LE(sr*2,28); buf.writeUInt16LE(2,32);
   buf.writeUInt16LE(16,34); buf.write('data',36); buf.writeUInt32LE(dataSize,40);
   return buf;
+}
+
+// ---- Phase 7: Apply Artist Memory to Vocal Config ----
+export async function applyArtistMemoryToVocalConfig(
+    artistId: string,
+    base: Partial<VoiceModelConfig>
+  ): Promise<VoiceModelConfig> {
+    const memory = await getArtistMemory(artistId);
+    return {
+          provider: 'caribbean',
+          voiceId: base.voiceId ?? (memory.preferredVoices[0] ?? 'mock-voice'),
+          vocalStyle: (base.vocalStyle ?? (memory.preferredModes[0] ?? 'deejay')) as VocalStyle,
+          stability: base.stability ?? 0.5,
+          similarityBoost: base.similarityBoost ?? 0.75,
+          modelId: base.modelId,
+          mode: (base.mode ?? memory.preferredModes[0] ?? 'deejay') as VocalMode,
+          energy: base.energy ?? memory.preferredEnergy,
+          accentProfile: (base.accentProfile ?? memory.preferredAccentProfiles[0] ?? 'light-patois') as AccentProfile,
+    };
 }
