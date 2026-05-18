@@ -464,3 +464,88 @@ export interface MarketplaceItem {
   createdAt: Date;
   updatedAt: Date;
 }
+
+// ---- Caribbean Vocal Intelligence (Phase 6) ----
+export type VocalMode = 'chant' | 'singjay' | 'deejay' | 'radio' | 'neutral';
+export type AccentProfile = 'heavy-patois' | 'light-patois' | 'diaspora' | 'trini' | 'bajan' | 'guyanese';
+
+export interface CaribbeanVoiceModel {
+  voiceId: string;
+  name: string;
+  origin: string;
+  accentProfiles: AccentProfile[];
+  supportedModes: VocalMode[];
+  provider: 'local' | '11labs' | 'mock';
+  externalVoiceId?: string;
+  sampleUrl?: string;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface TrainingDataset {
+  datasetId: string;
+  voiceId: string;
+  name: string;
+  description: string;
+  audioFileUrls: string[];
+  transcriptUrls: string[];
+  accentProfile: string;
+  mode: string;
+  durationMs: number;
+  sampleCount: number;
+  status: 'pending' | 'processing' | 'ready' | 'failed';
+  providerJobId?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ArtistVoiceSettings {
+  voiceId: string;
+  mode: VocalMode;
+  energy: number;
+  accentProfile: AccentProfile;
+  deliveryStyle: string;
+  pitchShiftSt: number;
+  reverbWet: number;
+  slapbackEnabled: boolean;
+  dubDelayEnabled: boolean;
+}
+
+export interface ArtistVoiceProfile {
+  artistId: string;
+  primaryVoiceId: string;
+  settings: ArtistVoiceSettings;
+  alternateVoiceIds: string[];
+  lastUsed: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface VocalPerformanceRequest {
+  phonemes: PhonemeSequence;
+  pocketMap: PocketMap;
+  mode: VocalMode;
+  energy: number;
+  accentProfile: AccentProfile;
+}
+
+export interface PerformedPhoneme extends Phoneme {
+  absoluteTimeMs: number;
+  pocketOffsetMs: number;
+  barIndex: number;
+  scaledDurationMs: number;
+  pitchShiftSt: number;
+  breathiness: number;
+  accentedSymbol: string;
+}
+
+export interface VocalPerformanceSequence {
+  phonemes: PerformedPhoneme[];
+  totalDurationMs: number;
+  bpm: number;
+  mode: VocalMode;
+  accentProfile: AccentProfile;
+  energy: number;
+  generatedAt: Date;
+}
