@@ -1,141 +1,142 @@
-import mongoose, { Document, Model, Schema } from 'mongoose';
+// ============================================================
+// lib/artistMemory.ts — Phase 7: Artist Memory Engine (MongoDB)
+// ============================================================
+import mongoose, { Document, Schema } from 'mongoose';
 import connectDB from './db';
 
-export interface ArtistPreferences {
-  bpmRange: { min: number; max: number };
-  riddimFamilies: string[];
-  swingAmount: number;
-  grooveDepth: number;
-  basslineType: string;
-  chordFlavor: string;
-  energyLevel: number;
-  dominantKey: string;
-  preferredStyles: string[];
-  avgPhraseBars: number;
-  pocketPosition: 'ahead' | 'on' | 'behind';
+// ---- Interfaces ----
+export interface RecentCreation {
+    jobId: string;
+    timestamp: Date;
+    bpm: number;
+    key: string;
+    style: string;
+    riddimFamilies: string[];
+    pocketPosition: 'ahead' | 'on' | 'behind';
+    energyLevel: number;
+    hookRhythmTemplate?: string;
+    voiceId?: string;
+    mode?: string;
+    accentProfile?: string;
 }
 
-export interface ArtistSessionHistory {
-  jobId: string;
-  timestamp: Date;
-  bpm: number;
-  key: string;
-  style: string;
-  riddimFamilies: string[];
-  pocketPosition: 'ahead' | 'on' | 'behind';
-  energyLevel: number;
-  hookRhythmTemplate?: string;
-}
-
-export interface ArtistProfile {
-  artistId: string;
+export interface ArtistMemoryData {
+    artistId: string;
+    preferredVoices: string[];
+    preferredModes: string[];
+    preferredAccentProfiles: string[];
+    preferredEnergy: number;
+    hookPatterns: string[];
+    flowPatterns: string[];
+    pocketPreferences: ('ahead' | 'on' | 'behind')[];
+    lyricalThemes: string[];
+    recentCreations: RecentCreation[];
+    // legacy compat
   displayName?: string;
-  preferences: ArtistPreferences;
-  sessionHistory: ArtistSessionHistory[];
-  totalSessions: number;
-  createdAt: Date;
-  updatedAt: Date;
+    totalSessions: number;
+    createdAt: Date;
+    updatedAt: Date;
 }
 
-export interface ArtistProfileDocument extends ArtistProfile, Document {}
+export interface ArtistMemoryDocument extends ArtistMemoryData, Document {}
 
-const ArtistPreferencesSchema = new Schema<ArtistPreferences>({
-  bpmRange:        { type: { min: Number, max: Number }, default: { min: 60, max: 160 } },
-  riddimFamilies:  { type: [String], default: [] },
-  swingAmount:     { type: Number, default: 0.5 },
-  grooveDepth:     { type: Number, default: 0.5 },
-  basslineType:    { type: String, default: 'roots' },
-  chordFlavor:     { type: String, default: 'minor7' },
-  energyLevel:     { type: Number, default: 0.5 },
-  dominantKey:     { type: String, default: 'Cm' },
-  preferredStyles: { type: [String], default: [] },
-  avgPhraseBars:   { type: Number, default: 8 },
-  pocketPosition:  { type: String, enum: ['ahead','on','behind'], default: 'on' },
+// ---- Schema ----
+const RecentCreationSchema = new Schema<RecentCreation>({
+    jobId: { type: String, required: true },
+    timestamp: { type: Date, default: Date.now },
+    bpm: { type: Number, default: 90 },
+    key: { type: String, default: 'Cm' },
+    style: { type: String, default: 'dancehall' },
+    riddimFamilies: { type: [String], default: [] },
+    pocketPosition: { type: String, enum: ['ahead','on','behind'], default: 'on' },
+    energyLevel: { type: Number, default: 0.5 },
+    hookRhythmTemplate: { type: String },
+    voiceId: { type: String },
+    mode: { type: String },
+    accentProfile: { type: String },
 }, { _id: false });
 
-const ArtistSessionHistorySchema = new Schema<ArtistSessionHistory>({
-  jobId:              { type: String, required: true },
-  timestamp:          { type: Date, default: Date.now },
-  bpm:                { type: Number, required: true },
-  key:                { type: String, required: true },
-  style:              { type: String, required: true },
-  riddimFamilies:     { type: [String], default: [] },
-  pocketPosition:     { type: String, enum: ['ahead','on','behind'], required: true },
-  energyLevel:        { type: Number, required: true },
-  hookRhythmTemplate: { type: String },
-}, { _id: false });
-
-const ArtistProfileSchema = new Schema<ArtistProfileDocument>({
-  artistId:       { type: String, required: true, unique: true, index: true },
-  displayName:    { type: String },
-  preferences:    { type: ArtistPreferencesSchema, default: () => ({}) },
-  sessionHistory: { type: [ArtistSessionHistorySchema], default: [] },
-  totalSessions:  { type: Number, default: 0 },
+const ArtistMemorySchema = new Schema<ArtistMemoryDocument>({
+    artistId: { type: String, required: true, unique: true, index: true },
+    displayName: { type: String },
+    preferredVoices: { type: [String], default: [] },
+    preferredModes: { type: [String], default: ['deejay'] },
+    preferredAccentProfiles: { type: [String], default: ['light-patois'] },
+    preferredEnergy: { type: Number, default: 0.7 },
+    hookPatterns: { type: [String], default: [] },
+    flowPatterns: { type: [String], default: [] },
+    pocketPreferences: { type: [String], enum: ['ahead','on','behind'], default: ['on'] },
+    lyricalThemes: { type: [String], default: [] },
+    recentCreations: { type: [RecentCreationSchema], default: [] },
+    totalSessions: { type: Number, default: 0 },
 }, { timestamps: true });
 
-export const ArtistProfileModel: Model<ArtistProfileDocument> =
-  (mongoose.models.ArtistProfile as Model<ArtistProfileDocument>) ||
-  mongoose.model<ArtistProfileDocument>('ArtistProfile', ArtistProfileSchema);
+const ArtistMemoryModel: mongoose.Model<ArtistMemoryDocument> =
+    mongoose.models.ArtistMemory ||
+    mongoose.model<ArtistMemoryDocument>('ArtistMemory', ArtistMemorySchema);
 
-export async function getOrCreateArtistProfile(artistId: string): Promise<ArtistProfileDocument> {
-  await connectDB();
-  const existing = await ArtistProfileModel.findOne({ artistId });
-  if (existing) return existing;
-  return ArtistProfileModel.create({
-    artistId,
-    preferences: {
-      bpmRange: { min: 60, max: 160 },
-      riddimFamilies: [],
-      swingAmount: 0.5,
-      grooveDepth: 0.5,
-      basslineType: 'roots',
-      chordFlavor: 'minor7',
-      energyLevel: 0.5,
-      dominantKey: 'Cm',
-      preferredStyles: [],
-      avgPhraseBars: 8,
-      pocketPosition: 'on',
-    },
-    sessionHistory: [],
-    totalSessions: 0,
-  });
+// ---- getArtistMemory ----
+export async function getArtistMemory(artistId: string): Promise<ArtistMemoryDocument> {
+    await connectDB();
+    let mem = await ArtistMemoryModel.findOne({ artistId });
+    if (!mem) {
+          mem = await ArtistMemoryModel.create({ artistId });
+    }
+    return mem;
 }
 
-export async function updateArtistPreferences(
-  artistId: string,
-  sessionData: Omit<ArtistSessionHistory, 'timestamp'>,
-): Promise<ArtistProfileDocument> {
-  await connectDB();
-  const profile = await getOrCreateArtistProfile(artistId);
-  const prefs = profile.preferences;
-  const history = profile.sessionHistory;
-  const n = history.length;
-
-  prefs.bpmRange.min = Math.min(prefs.bpmRange.min, sessionData.bpm);
-  prefs.bpmRange.max = Math.max(prefs.bpmRange.max, sessionData.bpm);
-  prefs.energyLevel = (prefs.energyLevel * n + sessionData.energyLevel) / (n + 1);
-
-  const recentPockets = [...history.slice(-9), sessionData].map(s => s.pocketPosition);
-  const pocketCounts = recentPockets.reduce((acc: Record<string,number>, p) => {
-    acc[p] = (acc[p] ?? 0) + 1; return acc;
-  }, {});
-  prefs.pocketPosition = Object.entries(pocketCounts).sort((a,b) => b[1]-a[1])[0][0] as ArtistPreferences['pocketPosition'];
-
-  const allStyles = [...history.map(s => s.style), sessionData.style];
-  const styleCounts = allStyles.reduce((acc: Record<string,number>, s) => {
-    acc[s] = (acc[s] ?? 0) + 1; return acc;
-  }, {});
-  prefs.preferredStyles = Object.entries(styleCounts).sort((a,b) => b[1]-a[1]).slice(0,3).map(e => e[0]);
-
-  prefs.riddimFamilies = Array.from(new Set([...prefs.riddimFamilies, ...sessionData.riddimFamilies]));
-  prefs.dominantKey = sessionData.key;
-
-  const newSession: ArtistSessionHistory = { ...sessionData, timestamp: new Date() };
-  const updatedHistory = [...history, newSession].slice(-50);
-
-  return ArtistProfileModel.findOneAndUpdate(
-    { artistId },
-    { $set: { preferences: prefs, sessionHistory: updatedHistory }, $inc: { totalSessions: 1 } },
-    { new: true, upsert: true },
-  ) as Promise<ArtistProfileDocument>;
+// ---- updateArtistMemory ----
+export async function updateArtistMemory(
+    artistId: string,
+    data: Partial<ArtistMemoryData>
+  ): Promise<ArtistMemoryDocument> {
+    await connectDB();
+    const existing = await getArtistMemory(artistId);
+    const merged = mergeArtistMemory(existing.toObject() as ArtistMemoryData, data);
+    await ArtistMemoryModel.updateOne({ artistId }, { $set: merged });
+    return getArtistMemory(artistId);
 }
+
+// ---- mergeArtistMemory ----
+export function mergeArtistMemory(
+    existing: ArtistMemoryData,
+    incoming: Partial<ArtistMemoryData>
+  ): Partial<ArtistMemoryData> {
+    const merged: Partial<ArtistMemoryData> = { ...existing };
+
+  if (incoming.preferredVoices?.length) {
+        merged.preferredVoices = [...new Set([...existing.preferredVoices, ...incoming.preferredVoices])];
+  }
+    if (incoming.preferredModes?.length) {
+          merged.preferredModes = [...new Set([...existing.preferredModes, ...incoming.preferredModes])];
+    }
+    if (incoming.preferredAccentProfiles?.length) {
+          merged.preferredAccentProfiles = [...new Set([...existing.preferredAccentProfiles, ...incoming.preferredAccentProfiles])];
+    }
+    if (incoming.preferredEnergy !== undefined) {
+          merged.preferredEnergy = incoming.preferredEnergy;
+    }
+    if (incoming.hookPatterns?.length) {
+          merged.hookPatterns = [...new Set([...existing.hookPatterns, ...incoming.hookPatterns])];
+    }
+    if (incoming.flowPatterns?.length) {
+          merged.flowPatterns = [...new Set([...existing.flowPatterns, ...incoming.flowPatterns])];
+    }
+    if (incoming.pocketPreferences?.length) {
+          merged.pocketPreferences = [...new Set([...existing.pocketPreferences, ...incoming.pocketPreferences])] as ('ahead'|'on'|'behind')[];
+    }
+    if (incoming.lyricalThemes?.length) {
+          merged.lyricalThemes = [...new Set([...existing.lyricalThemes, ...incoming.lyricalThemes])];
+    }
+    if (incoming.recentCreations?.length) {
+          const combined = [...existing.recentCreations, ...incoming.recentCreations];
+          merged.recentCreations = combined.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 50);
+          merged.totalSessions = (existing.totalSessions || 0) + incoming.recentCreations.length;
+    }
+
+  return merged;
+}
+
+// legacy compat export
+export { getArtistMemory as getOrCreateArtistProfile };
+export type { ArtistMemoryData as ArtistPreferences };
