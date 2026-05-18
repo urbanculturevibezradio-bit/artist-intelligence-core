@@ -1,5 +1,5 @@
 import { FlowPatternProfile } from './flowPatterns';
-import { ArtistPreferences } from './artistMemory';
+import { getArtistMemory } from './artistMemory';
 
 export type HookSectionType = 'chorus' | 'verse' | 'bridge' | 'intro' | 'outro';
 
@@ -140,4 +140,20 @@ export function generateHookIdeas(
   ].join(' ');
 
   return { jobId, templates, callAndResponse, suggestedBarLengths, chorusContrast, generatedAt: new Date() };
+}
+
+// ---- Phase 7: Apply Artist Memory to Hook/Riddim Engine ----
+export async function applyArtistMemoryToHookEngine(
+    artistId: string,
+    prefs: { pocketPosition?: 'ahead'|'on'|'behind'; energyLevel?: number; riddimFamilies?: string[]; avgPhraseBars?: number; swingAmount?: number; grooveDepth?: number; }
+  ): Promise<typeof prefs> {
+    const memory = await getArtistMemory(artistId);
+    return {
+          pocketPosition: prefs.pocketPosition ?? (memory.pocketPreferences[0] ?? 'on'),
+          energyLevel: prefs.energyLevel ?? memory.preferredEnergy,
+          riddimFamilies: prefs.riddimFamilies?.length ? prefs.riddimFamilies : (memory.flowPatterns.length ? memory.flowPatterns : ['dancehall']),
+          avgPhraseBars: prefs.avgPhraseBars ?? 8,
+          swingAmount: prefs.swingAmount ?? 0.5,
+          grooveDepth: prefs.grooveDepth ?? 0.5,
+    };
 }
